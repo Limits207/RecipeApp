@@ -80,30 +80,37 @@ export default function HomeScreen() {
         }}
         renderItem={({ item }) => (
           <View style={{ width: CARD_MAX_WIDTH, margin: CARD_MARGIN / 2, alignItems: 'center' }}>
-            <TouchableOpacity
-              style={[styles.card, { width: '100%', maxWidth: CARD_MAX_WIDTH, aspectRatio: 1 }]}
-              onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item._id } })}
-              activeOpacity={0.92}
-            >
-              <Image source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }} style={[styles.image, { aspectRatio: 1 }]} />
-              <View style={styles.infoWrap}>
-                <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-                <Text style={styles.creator} numberOfLines={1}>
-                  {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
-                </Text>
-                <View style={styles.row}>
-                  <Text style={styles.likes}>{item.likes || 0} Likes</Text>
-                  <TouchableOpacity
-                    style={[styles.likeBtn, liked[item._id] && styles.liked]}
-                    onPress={() => handleLike(item._id)}
-                    disabled={!token || liked[item._id]}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="heart" size={20} color={liked[item._id] ? '#fff' : '#b8a88e'} />
-                  </TouchableOpacity>
+            <View style={{ position: 'relative', width: '100%', height: '100%' }}>
+              <TouchableOpacity
+                style={[styles.card, { width: '100%', maxWidth: CARD_MAX_WIDTH, aspectRatio: 1, padding: 0 }]}
+                onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item._id } })}
+                activeOpacity={0.92}
+              >
+                <Image
+                  source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
+                  style={styles.fullImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.heartButton}
+                onPress={() => handleLike(item._id)}
+                disabled={!token || liked[item._id]}
+                activeOpacity={0.7}
+              >
+                <View style={styles.heartShape}>
+                  <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
+                  <Text style={styles.heartCount}>{item.likes || 0}</Text>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+            {/* Overlay text inside image container for mobile visibility */}
+            <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
+              <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
+              <Text style={styles.creatorOverlay} numberOfLines={1}>
+                {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
+              </Text>
+            </View>
           </View>
         )}
         numColumns={undefined}
@@ -190,14 +197,121 @@ const styles = StyleSheet.create({
     backdropFilter: Platform.OS === 'web' ? 'blur(8px)' : undefined,
   },
   image: {
+    display: 'none', // legacy, not used
+  },
+  fullImage: {
     width: '100%',
-    height: undefined,
-    flex: 1,
-    resizeMode: 'cover',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    borderRadius: 18,
     backgroundColor: '#e6e3de',
+    zIndex: 1,
     aspectRatio: 1,
+    boxShadow: Platform.OS === 'web' ? '0 2px 12px rgba(0,0,0,0.08)' : undefined,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  overlay: {
+    display: 'none', // overlay no longer used
+  },
+  heartButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 3,
+    backgroundColor: 'transparent',
+    borderRadius: 18,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  heartShape: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    backgroundColor: 'rgba(232, 76, 61, 0.85)',
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  heartIconWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  heartCount: {
+    position: 'absolute',
+    right: 0,
+    left: 0,
+    bottom: 4,
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: 'bold',
+    backgroundColor: 'transparent',
+    zIndex: 4,
+    textAlign: 'center',
+    minWidth: 12,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  infoOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    zIndex: 2,
+    alignItems: 'center',
+  },
+  titleOverlay: {
+    fontWeight: '700',
+    fontSize: 15,
+    color: '#fff',
+    marginBottom: 2,
+    letterSpacing: 0.12,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  creatorOverlay: {
+    fontSize: 12,
+    color: '#fff',
+    marginBottom: 0,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    opacity: 0.85,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  infoBelow: {
+    width: '100%',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    minHeight: 48,
   },
   infoWrap: {
     padding: 16,
@@ -206,10 +320,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: '700',
-    fontSize: 18,
-    color: '#5a4b3c',
-    marginBottom: 10,
+    fontSize: 16,
+    color: '#3e2723',
+    marginBottom: 2,
     letterSpacing: 0.12,
+    textAlign: 'center',
+    textShadowColor: 'rgba(255,255,255,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   row: {
     flexDirection: 'row',
@@ -237,10 +355,12 @@ const styles = StyleSheet.create({
     borderColor: '#b8a88e',
   },
   creator: {
-    fontSize: 14,
-    color: '#a6a6a6',
-    marginBottom: 4,
+    fontSize: 13,
+    color: '#8d7754',
+    marginBottom: 6,
     fontStyle: 'italic',
+    textAlign: 'center',
+    opacity: 0.85,
   },
   fab: {
     position: 'absolute',
