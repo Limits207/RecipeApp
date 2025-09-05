@@ -65,29 +65,37 @@ export default function HomeScreen() {
         data={filteredRecipes}
         keyExtractor={item => item._id}
         numColumns={numColumns}
-        contentContainerStyle={{ padding: CARD_MARGIN, paddingTop: 0, minHeight: '100%' }}
+        contentContainerStyle={{
+          padding: CARD_MARGIN,
+          paddingTop: 0,
+          minHeight: '100%',
+          flexGrow: 1,
+        }}
+        columnWrapperStyle={{ flex: 1, justifyContent: 'space-between' }}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/recipes/${item._id}`)}
-            activeOpacity={0.92}
-          >
-            <Image source={{ uri: item.image }} style={styles.image} />
-            <View style={styles.infoWrap}>
-              <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-              <View style={styles.row}>
-                <Text style={styles.likes}>{item.likes || 0} Likes</Text>
-                <TouchableOpacity
-                  style={[styles.likeBtn, liked[item._id] && styles.liked]}
-                  onPress={() => handleLike(item._id)}
-                  disabled={!token || liked[item._id]}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="heart" size={20} color={liked[item._id] ? '#fff' : '#b8a88e'} />
-                </TouchableOpacity>
+          <View style={{ flex: 1, minWidth: 0, maxWidth: '50%', flexBasis: '50%' }}>
+            <TouchableOpacity
+              style={[styles.card, { width: '100%', maxWidth: 400, alignSelf: 'center', aspectRatio: 1 }]}
+              onPress={() => router.push(`/recipes/${item._id}`)}
+              activeOpacity={0.92}
+            >
+              <Image source={{ uri: item.images?.[0] }} style={[styles.image, { aspectRatio: 1 }]} />
+              <View style={styles.infoWrap}>
+                <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+                <View style={styles.row}>
+                  <Text style={styles.likes}>{item.likes || 0} Likes</Text>
+                  <TouchableOpacity
+                    style={[styles.likeBtn, liked[item._id] && styles.liked]}
+                    onPress={() => handleLike(item._id)}
+                    disabled={!token || liked[item._id]}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="heart" size={20} color={liked[item._id] ? '#fff' : '#b8a88e'} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         )}
       />
       <TouchableOpacity style={styles.fab} onPress={() => router.push('/upload')} activeOpacity={0.85}>
@@ -167,16 +175,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1cfc9',
     paddingBottom: 0,
-    minHeight: 250,
+    minHeight: 0,
+    aspectRatio: 1,
     backdropFilter: Platform.OS === 'web' ? 'blur(8px)' : undefined,
   },
   image: {
     width: '100%',
-    height: 150,
+    height: undefined,
+    flex: 1,
     resizeMode: 'cover',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: '#e6e3de',
+    aspectRatio: 1,
   },
   infoWrap: {
     padding: 16,
