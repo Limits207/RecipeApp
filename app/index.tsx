@@ -88,7 +88,7 @@ export default function HomeScreen() {
               <View style={{ position: 'relative', width: '100%', height: '100%' }}>
                 <TouchableOpacity
                   style={[styles.card, { width: '100%', aspectRatio: 1, padding: 0 }]}
-                  onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item._id } })}
+                  onPress={() => router.push(`/recipes/${item._id}`)}
                   activeOpacity={0.92}
                 >
                   <Image
