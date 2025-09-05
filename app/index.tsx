@@ -5,8 +5,16 @@ import axios from 'axios';
 import { useAuth } from '../AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
-const CARD_MARGIN = 14;
-const CARD_MAX_WIDTH = 150;
+const SCREEN_WIDTH = Dimensions.get('window').width;
+// Responsive: 2 columns for small, 3 for medium, 4 for large screens
+const getNumColumns = () => {
+  if (SCREEN_WIDTH < 500) return 2;
+  if (SCREEN_WIDTH < 900) return 3;
+  return 4;
+};
+const NUM_COLUMNS = getNumColumns();
+const CARD_MARGIN = Math.max(8, Math.round(SCREEN_WIDTH * 0.025));
+const CARD_WIDTH = (SCREEN_WIDTH - CARD_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -66,63 +74,67 @@ export default function HomeScreen() {
           onChangeText={setSearch}
         />
       </View>
-      <FlatList
-        data={filteredRecipes}
-        keyExtractor={item => item._id}
-        contentContainerStyle={{
-          padding: CARD_MARGIN,
-          paddingTop: 0,
-          minHeight: '100%',
-          flexGrow: 1,
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          justifyContent: 'center', // Center cards horizontally
-        }}
-        renderItem={({ item }) => (
-          <View style={{ width: CARD_MAX_WIDTH, margin: CARD_MARGIN / 2, alignItems: 'center' }}>
-            <View style={{ position: 'relative', width: '100%', height: '100%' }}>
-              <TouchableOpacity
-                style={[styles.card, { width: '100%', maxWidth: CARD_MAX_WIDTH, aspectRatio: 1, padding: 0 }]}
-                onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item._id } })}
-                activeOpacity={0.92}
-              >
-                <Image
-                  source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
-                  style={styles.fullImage}
-                  resizeMode="cover"
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.heartButton}
-                onPress={() => handleLike(item._id)}
-                disabled={!token || liked[item._id]}
-                activeOpacity={0.7}
-              >
-                <View style={styles.heartShape}>
-                  <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
-                  <Text style={styles.heartCount}>{item.likes || 0}</Text>
-                </View>
-              </TouchableOpacity>
+      <Text style={styles.mostRecentTitle}>Most Recent</Text>
+      <View style={{ flex: 1 }}>
+        <FlatList
+          data={filteredRecipes}
+          keyExtractor={item => item._id}
+          contentContainerStyle={{
+            padding: CARD_MARGIN,
+            paddingTop: 0,
+          }}
+          renderItem={({ item }) => (
+            <View style={{ width: CARD_WIDTH, marginLeft: CARD_MARGIN / 2, marginRight: CARD_MARGIN / 2, marginBottom: CARD_MARGIN / 2, alignItems: 'center' }}>
+              <View style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <TouchableOpacity
+                  style={[styles.card, { width: '100%', aspectRatio: 1, padding: 0 }]}
+                  onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item._id } })}
+                  activeOpacity={0.92}
+                >
+                  <Image
+                    source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
+                    style={styles.fullImage}
+                    resizeMode="cover"
+                  />
+                  {/* Overlay text as a child of the image for mobile visibility */}
+                  <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
+                    <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.creatorOverlay} numberOfLines={1}>
+                      {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.heartButton}
+                  onPress={() => handleLike(item._id)}
+                  disabled={!token || liked[item._id]}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.heartShape}>
+                    <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
+                    <Text style={styles.heartCount}>{item.likes || 0}</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
             </View>
-            {/* Overlay text inside image container for mobile visibility */}
-            <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
-              <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
-              <Text style={styles.creatorOverlay} numberOfLines={1}>
-                {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
-              </Text>
-            </View>
-          </View>
-        )}
-        numColumns={undefined}
-      />
-      <TouchableOpacity style={styles.fab} onPress={() => router.push('/upload')} activeOpacity={0.85}>
-        <Ionicons name="add" size={32} color="#fff" />
-      </TouchableOpacity>
+          )}
+          numColumns={NUM_COLUMNS}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  mostRecentTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#8d7754',
+    marginLeft: 22,
+    marginTop: 8,
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
