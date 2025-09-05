@@ -15,7 +15,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     setSubmitting(true);
     try {
-      const res = await axios.post('http://192.168.50.210:3000/auth/login', { email, password });
+  const res = await axios.post('http://192.168.50.210:8081/auth/login', { email, password });
       setToken(res.data.token);
       setUser(res.data.user);
       router.replace('/');

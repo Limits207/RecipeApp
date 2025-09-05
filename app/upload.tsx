@@ -45,7 +45,7 @@ export default function UploadScreen() {
           type: 'image/jpeg',
         } as any);
       });
-      const res = await axios.post('http://192.168.50.210:3000/recipes', formData, {
+  const res = await axios.post('http://192.168.50.210:8081/recipes', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),

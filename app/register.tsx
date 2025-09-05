@@ -13,7 +13,7 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     setSubmitting(true);
     try {
-      await axios.post('http://192.168.50.210:3000/auth/register', { email, password });
+  await axios.post('http://192.168.50.210:8081/auth/register', { email, password });
       Alert.alert('Success', 'Account created! Please log in.');
       router.replace('/login');
     } catch (err: any) {

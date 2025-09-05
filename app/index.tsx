@@ -5,9 +5,8 @@ import axios from 'axios';
 import { useAuth } from '../AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
-const numColumns = 2;
 const CARD_MARGIN = 14;
-const CARD_WIDTH = (Dimensions.get('window').width - CARD_MARGIN * (numColumns + 1)) / numColumns;
+const CARD_MAX_WIDTH = 150;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -19,8 +18,12 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    axios.get('http://192.168.50.210:3000/recipes')
-      .then(res => setRecipes(res.data))
+    axios.get('http://192.168.50.210:8081/recipes')
+      .then(res => {
+        // Sort recipes by most recent (assuming MongoDB _id timestamp order)
+        const sorted = [...res.data].reverse();
+        setRecipes(sorted);
+      })
       .catch((err: any) => setError('Failed to load recipes'))
       .finally(() => setLoading(false));
   }, []);
@@ -29,7 +32,7 @@ export default function HomeScreen() {
     if (!token) return; // Only allow likes if logged in
     if (liked[id]) return; // Only like once
     try {
-      await axios.post(`http://192.168.50.210:3000/recipes/${id}/like`);
+  await axios.post(`http://192.168.50.210:8081/recipes/${id}/like`);
       setLiked(prev => ({ ...prev, [id]: true }));
     } catch {
       // Optionally show error
@@ -46,7 +49,9 @@ export default function HomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#f4f4f7' }}>
       <View style={styles.header}>
-        <Image source={require('../assets/images/icon.png')} style={styles.logo} />
+        <TouchableOpacity style={styles.menuIcon} onPress={() => {/* TODO: open menu */}}>
+          <Ionicons name="menu" size={38} color="#8d7754" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Cookbook</Text>
         <TouchableOpacity style={styles.profileIcon} onPress={() => router.push('/login')}>
           <Ionicons name="person-circle-outline" size={34} color="#8d7754" />
@@ -64,24 +69,28 @@ export default function HomeScreen() {
       <FlatList
         data={filteredRecipes}
         keyExtractor={item => item._id}
-        numColumns={numColumns}
         contentContainerStyle={{
           padding: CARD_MARGIN,
           paddingTop: 0,
           minHeight: '100%',
           flexGrow: 1,
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          justifyContent: 'center', // Center cards horizontally
         }}
-        columnWrapperStyle={{ flex: 1, justifyContent: 'space-between' }}
         renderItem={({ item }) => (
-          <View style={{ flex: 1, minWidth: 0, maxWidth: '50%', flexBasis: '50%' }}>
+          <View style={{ width: CARD_MAX_WIDTH, margin: CARD_MARGIN / 2, alignItems: 'center' }}>
             <TouchableOpacity
-              style={[styles.card, { width: '100%', maxWidth: 400, alignSelf: 'center', aspectRatio: 1 }]}
-              onPress={() => router.push(`/recipes/${item._id}`)}
+              style={[styles.card, { width: '100%', maxWidth: CARD_MAX_WIDTH, aspectRatio: 1 }]}
+              onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item._id } })}
               activeOpacity={0.92}
             >
-              <Image source={{ uri: item.images?.[0] }} style={[styles.image, { aspectRatio: 1 }]} />
+              <Image source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }} style={[styles.image, { aspectRatio: 1 }]} />
               <View style={styles.infoWrap}>
                 <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+                <Text style={styles.creator} numberOfLines={1}>
+                  {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
+                </Text>
                 <View style={styles.row}>
                   <Text style={styles.likes}>{item.likes || 0} Likes</Text>
                   <TouchableOpacity
@@ -97,6 +106,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         )}
+        numColumns={undefined}
       />
       <TouchableOpacity style={styles.fab} onPress={() => router.push('/upload')} activeOpacity={0.85}>
         <Ionicons name="add" size={32} color="#fff" />
@@ -122,12 +132,14 @@ const styles = StyleSheet.create({
     zIndex: 2,
     justifyContent: 'flex-start',
   },
-  logo: {
+  menuIcon: {
     width: 38,
     height: 38,
     borderRadius: 12,
     marginRight: 14,
     backgroundColor: '#f4f4f7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 28,
@@ -164,8 +176,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: 'rgba(249,249,250,0.95)',
     borderRadius: 24,
-    margin: CARD_MARGIN,
-    width: CARD_WIDTH,
     overflow: 'hidden',
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } },
@@ -225,6 +235,12 @@ const styles = StyleSheet.create({
   liked: {
     backgroundColor: '#b8a88e',
     borderColor: '#b8a88e',
+  },
+  creator: {
+    fontSize: 14,
+    color: '#a6a6a6',
+    marginBottom: 4,
+    fontStyle: 'italic',
   },
   fab: {
     position: 'absolute',
