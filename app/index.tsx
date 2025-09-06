@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import axios from 'axios';
 import { useAuth } from '../AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useWindowDimensions } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 // Responsive: 2 columns for small, 3 for medium, 4 for large screens
@@ -12,9 +13,10 @@ const getNumColumns = () => {
   if (SCREEN_WIDTH < 900) return 3;
   return 4;
 };
-const NUM_COLUMNS = getNumColumns();
-const CARD_MARGIN = Math.max(8, Math.round(SCREEN_WIDTH * 0.025));
-const CARD_WIDTH = (SCREEN_WIDTH - CARD_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
+const NUM_COLUMNS = 1;
+// Use adaptive width for cards based on screen size
+const CARD_MARGIN = Math.max(1, Math.round(Dimensions.get('window').width * 0.01));
+const CARD_WIDTH = Dimensions.get('window').width - CARD_MARGIN * 2;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -54,73 +56,159 @@ export default function HomeScreen() {
   if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#ffb347" />;
   if (error) return <Text style={{ color: '#e57373', margin: 20, fontSize: 16 }}>{error}</Text>;
 
+  // Chunk recipes into rows of 2
+  const rows = [];
+  for (let i = 0; i < filteredRecipes.length; i += 2) {
+    rows.push(filteredRecipes.slice(i, i + 2));
+  }
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#f4f4f7' }}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.menuIcon} onPress={() => {/* TODO: open menu */}}>
-          <Ionicons name="menu" size={38} color="#8d7754" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cookbook</Text>
-        <TouchableOpacity style={styles.profileIcon} onPress={() => router.push('/login')}>
-          <Ionicons name="person-circle-outline" size={34} color="#8d7754" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.searchWrap}>
-        <TextInput
-          style={styles.search}
-          placeholder="Search recipes..."
-          placeholderTextColor="#a6a6a6"
-          value={search}
-          onChangeText={setSearch}
-        />
-      </View>
-      <Text style={styles.mostRecentTitle}>Most Recent</Text>
-      <View style={{ flex: 1 }}>
-        <FlatList
-          data={filteredRecipes}
-          keyExtractor={item => item._id}
-          contentContainerStyle={{
-            padding: CARD_MARGIN,
-            paddingTop: 0,
-          }}
-          renderItem={({ item }) => (
-            <View style={{ width: CARD_WIDTH, marginLeft: CARD_MARGIN / 2, marginRight: CARD_MARGIN / 2, marginBottom: CARD_MARGIN / 2, alignItems: 'center' }}>
-              <View style={{ position: 'relative', width: '100%', height: '100%' }}>
-                <TouchableOpacity
-                  style={[styles.card, { width: '100%', aspectRatio: 1, padding: 0 }]}
-                  onPress={() => router.push(`/recipes/${item._id}`)}
-                  activeOpacity={0.92}
-                >
-                  <Image
-                    source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
-                    style={styles.fullImage}
-                    resizeMode="cover"
-                  />
-                  {/* Overlay text as a child of the image for mobile visibility */}
-                  <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
-                    <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.creatorOverlay} numberOfLines={1}>
-                      {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.heartButton}
-                  onPress={() => handleLike(item._id)}
-                  disabled={!token || liked[item._id]}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.heartShape}>
-                    <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
-                    <Text style={styles.heartCount}>{item.likes || 0}</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
+    <View style={{ flex: 1, backgroundColor: '#f8f6f2' }}>
+      <FlatList
+        ListHeaderComponent={
+          <>
+            {/* Modern AppBar/Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingTop: Platform.OS === 'ios' ? 54 : 32,
+              paddingBottom: 18,
+              paddingHorizontal: 24,
+              backgroundColor: '#fff',
+              borderBottomLeftRadius: 32,
+              borderBottomRightRadius: 32,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.08,
+              shadowRadius: 8,
+              elevation: 4,
+            }}>
+              <TouchableOpacity onPress={() => {/* TODO: open menu */}}>
+                <Ionicons name="menu" size={32} color="#bfa16a" />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#bfa16a', letterSpacing: 1 }}>Cookbook</Text>
+              <TouchableOpacity onPress={() => router.push('/login')}>
+                <Ionicons name="person-circle-outline" size={32} color="#bfa16a" />
+              </TouchableOpacity>
             </View>
-          )}
-          numColumns={NUM_COLUMNS}
-        />
-      </View>
+
+            {/* Search Bar with shadow */}
+            <View style={{
+              marginTop: -24,
+              marginBottom: 12,
+              marginHorizontal: 24,
+              backgroundColor: '#fff',
+              borderRadius: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.07,
+              shadowRadius: 6,
+              elevation: 2,
+            }}>
+              <Ionicons name="search" size={22} color="#bfa16a" style={{ marginRight: 8 }} />
+              <TextInput
+                style={{ flex: 1, height: 44, fontSize: 16, color: '#222' }}
+                placeholder="Search recipes..."
+                placeholderTextColor="#bfa16a"
+                value={search}
+                onChangeText={setSearch}
+                returnKeyType="search"
+              />
+            </View>
+
+            {/* Section Title */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, marginTop: 2 }}>
+              <View style={{ width: 6, height: 24, backgroundColor: '#bfa16a', borderRadius: 3, marginRight: 10 }} />
+              <Text style={{ fontSize: 20, fontWeight: '600', color: '#bfa16a', letterSpacing: 0.5 }}>Most Recent</Text>
+            </View>
+          </>
+        }
+        data={filteredRecipes}
+        keyExtractor={item => item._id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: CARD_MARGIN * 2,
+          paddingTop: 0,
+          paddingBottom: 24,
+        }}
+        renderItem={({ item, index }) => (
+          <View
+            style={{
+              width: CARD_WIDTH,
+              marginBottom: 10,
+              alignItems: 'center',
+              alignSelf: 'center',
+            }}
+          >
+            <View style={{
+              backgroundColor: '#fff',
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: '#e0e0e0',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.06,
+              shadowRadius: 6,
+              elevation: 2,
+              width: '100%',
+              overflow: 'hidden',
+            }}>
+              <TouchableOpacity
+                style={[styles.card, { width: '100%', aspectRatio: 2.2, padding: 0, backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }]}
+                onPress={() => router.push(`/recipes/${item._id}`)}
+                activeOpacity={0.92}
+              >
+                <Image
+                  source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
+                  style={[styles.fullImage, { borderRadius: 0 }]}
+                  resizeMode="cover"
+                />
+                <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
+                  <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.creatorOverlay} numberOfLines={1}>
+                    {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.heartButton}
+                onPress={() => handleLike(item._id)}
+                disabled={!token || liked[item._id]}
+                activeOpacity={0.7}
+              >
+                <View style={styles.heartShape}>
+                  <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
+                  <Text style={styles.heartCount}>{item.likes || 0}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+  style={{}}
+      />
+
+      {/* Floating Upload Button */}
+      <TouchableOpacity
+        style={[
+          styles.fab,
+          {
+            backgroundColor: '#bfa16a',
+            shadowColor: '#bfa16a',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.18,
+            shadowRadius: 8,
+            elevation: 8,
+          },
+        ]}
+        onPress={() => router.push('/upload')}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={36} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -132,7 +220,7 @@ const styles = StyleSheet.create({
     color: '#8d7754',
     marginLeft: 22,
     marginTop: 8,
-    marginBottom: 2,
+    marginBottom: CARD_MARGIN / 2,
     letterSpacing: 0.2,
   },
   header: {

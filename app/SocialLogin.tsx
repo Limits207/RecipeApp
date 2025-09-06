@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform, Alert } from 'react-native';
 import * as AuthSession from 'expo-auth-session';
+import { useAuthRequest, makeRedirectUri, ResponseType } from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth } from '../AuthContext';
 
@@ -10,25 +11,31 @@ const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
 export default function SocialLogin() {
   const { setUser, setToken } = useAuth();
 
-  const handleGoogleLogin = async () => {
-    try {
-      const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
-      const result = await AuthSession.startAsync({
-        authUrl:
-          `https://accounts.google.com/o/oauth2/v2/auth?` +
-          `client_id=${GOOGLE_CLIENT_ID}` +
-          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-          `&response_type=token` +
-          `&scope=profile%20email`,
-      });
-      if (result.type === 'success') {
-        // You would send result.params.access_token to your backend for verification and user creation/login
-        Alert.alert('Google login success', JSON.stringify(result.params));
-        // setUser(...), setToken(...)
-      }
-    } catch (err) {
-      Alert.alert('Google login error', err?.message || String(err));
+  const discovery = {
+    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenEndpoint: 'https://oauth2.googleapis.com/token',
+    revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+  };
+
+  const [request, response, promptAsync] = useAuthRequest(
+    {
+      clientId: GOOGLE_CLIENT_ID,
+      scopes: ['profile', 'email'],
+      redirectUri: makeRedirectUri({}),
+      responseType: ResponseType.Token,
+    },
+    discovery
+  );
+
+  React.useEffect(() => {
+    if (response?.type === 'success' && response.authentication?.accessToken) {
+      Alert.alert('Google login success', JSON.stringify(response.authentication));
+      // setUser(...), setToken(...)
     }
+  }, [response]);
+
+  const handleGoogleLogin = () => {
+    promptAsync();
   };
 
   const handleAppleLogin = async () => {
@@ -43,8 +50,8 @@ export default function SocialLogin() {
       Alert.alert('Apple login success', JSON.stringify(credential));
       // setUser(...), setToken(...)
     } catch (err) {
-      if (err.code !== 'ERR_CANCELED') {
-        Alert.alert('Apple login error', err?.message || String(err));
+      if (typeof err === 'object' && err !== null && 'code' in err && (err as any).code !== 'ERR_CANCELED') {
+        Alert.alert('Apple login error', (err as any)?.message || String(err));
       }
     }
   };
