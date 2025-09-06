@@ -39,6 +39,7 @@ interface AuthContextType {
   token: string | null;
   setToken: (token: string | null) => void;
   loading: boolean;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -51,7 +52,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     (async () => {
       const stored = await storage.getItem('token');
-      if (stored) setToken(stored);
+      if (stored) {
+        setToken(stored);
+        try {
+          // Fetch user profile with stored token
+          const res = await axios.get('http://192.168.50.210:8081/auth/me');
+          setUser(res.data);
+        } catch (err) {
+          setUser(null);
+        }
+      }
       setLoading(false);
     })();
   }, []);
@@ -66,8 +76,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [token]);
 
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, setUser, token, setToken, loading }}>
+    <AuthContext.Provider value={{ user, setUser, token, setToken, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );

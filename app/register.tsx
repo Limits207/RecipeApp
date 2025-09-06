@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
+import { API_ENDPOINTS } from '../constants/api';
 import SocialLogin from './SocialLogin';
 
 export default function RegisterScreen() {
@@ -13,11 +14,16 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     setSubmitting(true);
     try {
-  await axios.post('http://192.168.50.210:8081/auth/register', { email, password });
+  await axios.post(API_ENDPOINTS.register, { email, password });
       Alert.alert('Success', 'Account created! Please log in.');
       router.replace('/login');
     } catch (err: any) {
-      Alert.alert('Registration failed', err?.response?.data?.message || 'Unknown error');
+      const errorMsg = err?.response?.data?.message || '';
+      if (errorMsg.toLowerCase().includes('email') && errorMsg.toLowerCase().includes('already')) {
+        Alert.alert('Account exists', 'An account with that email already exists.');
+      } else {
+        Alert.alert('Registration failed', errorMsg || 'Unknown error');
+      }
     } finally {
       setSubmitting(false);
     }

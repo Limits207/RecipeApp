@@ -1,10 +1,24 @@
+
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Dimensions, Platform, TextInput } from 'react-native';
+import { Recipe } from '../constants/types';
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Dimensions, Platform, TextInput, Modal } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
+import { API_ENDPOINTS } from '../constants/api';
 import { useAuth } from '../AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useWindowDimensions } from 'react-native';
+
+
+const MENU_OPTIONS = [
+  { key: 'recent', label: 'Most Recent' },
+  { key: 'liked', label: 'Most Liked' },
+  { key: 'ethnicity', label: 'Ethnicity' },
+];
+const ETHNICITY_OPTIONS = [
+  '', 'American', 'Chinese', 'French', 'Greek', 'Indian', 'Italian', 'Japanese', 'Korean', 'Mexican', 'Middle Eastern', 'Thai', 'Vietnamese', 'Mediterranean', 'Spanish', 'African', 'Caribbean', 'Latin American', 'Other'
+];
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 // Responsive: 2 columns for small, 3 for medium, 4 for large screens
@@ -18,211 +32,321 @@ const NUM_COLUMNS = 1;
 const CARD_MARGIN = Math.max(1, Math.round(Dimensions.get('window').width * 0.01));
 const CARD_WIDTH = Dimensions.get('window').width - CARD_MARGIN * 2;
 
+
 export default function HomeScreen() {
+  const [menu, setMenu] = useState<'recent' | 'liked' | 'ethnicity'>('recent');
+  const [selectedEthnicity, setSelectedEthnicity] = useState('');
+  const [menuModalVisible, setMenuModalVisible] = useState(false);
   const router = useRouter();
-  const { user, token } = useAuth();
-  const [recipes, setRecipes] = useState<any[]>([]);
+  const { user, token, logout } = useAuth();
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [liked, setLiked] = useState<{ [id: string]: boolean }>({});
   const [search, setSearch] = useState('');
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+
+  // Sync recipes and liked state from backend
 
   useEffect(() => {
-    axios.get('http://192.168.50.210:8081/recipes')
-      .then(res => {
-        // Sort recipes by most recent (assuming MongoDB _id timestamp order)
-        const sorted = [...res.data].reverse();
-        setRecipes(sorted);
-      })
-      .catch((err: any) => setError('Failed to load recipes'))
-      .finally(() => setLoading(false));
-  }, []);
+    const fetchRecipes = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await axios.get(API_ENDPOINTS.recipes);
+        setRecipes(res.data);
+      } catch (err: any) {
+        setError('Failed to load recipes');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRecipes();
+  }, [user]);
+
+  // Always sync liked state from user.likedRecipes and recipes
+  useEffect(() => {
+    if (user && user.likedRecipes && recipes.length > 0) {
+      const likedMap: { [id: string]: boolean } = {};
+      const recipeIds = new Set(recipes.map(r => r._id));
+      user.likedRecipes.forEach((rid: any) => {
+        const id = typeof rid === 'string' ? rid : rid._id;
+        if (recipeIds.has(id)) likedMap[id] = true;
+      });
+      setLiked(likedMap);
+    } else {
+      setLiked({});
+    }
+  }, [user, recipes]);
 
   const handleLike = async (id: string) => {
     if (!token) return; // Only allow likes if logged in
-    if (liked[id]) return; // Only like once
     try {
-  await axios.post(`http://192.168.50.210:8081/recipes/${id}/like`);
-      setLiked(prev => ({ ...prev, [id]: true }));
-    } catch {
-      // Optionally show error
+      if (!liked[id]) {
+        // Like the recipe
+        await axios.post(`${API_ENDPOINTS.recipes}/${id}/like`, {}, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } else {
+        // Unlike the recipe
+        await axios.post(`${API_ENDPOINTS.recipes}/${id}/unlike`, {}, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      // Always refresh recipes and liked state after like/unlike
+      const res = await axios.get(API_ENDPOINTS.recipes);
+      setRecipes(res.data);
+      if (user && user.likedRecipes) {
+        setLiked(
+          res.data.reduce((acc: any, r: any) => {
+            if (user.likedRecipes.includes(r._id)) acc[r._id] = true;
+            return acc;
+          }, {})
+        );
+      } else {
+        setLiked({});
+      }
+    } catch (err) {
+      // Optionally handle error (e.g., already liked/unliked, network error)
     }
   };
 
-  const filteredRecipes = recipes.filter(r =>
+  let filteredRecipes = recipes.filter(r =>
     r.title.toLowerCase().includes(search.toLowerCase())
   );
-
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#ffb347" />;
-  if (error) return <Text style={{ color: '#e57373', margin: 20, fontSize: 16 }}>{error}</Text>;
-
-  // Chunk recipes into rows of 2
-  const rows = [];
-  for (let i = 0; i < filteredRecipes.length; i += 2) {
-    rows.push(filteredRecipes.slice(i, i + 2));
+  if (menu === 'liked') {
+    filteredRecipes = [...filteredRecipes].sort((a, b) => (b.likes || 0) - (a.likes || 0));
+  } else if (menu === 'recent') {
+    filteredRecipes = [...filteredRecipes].sort((a, b) => (a._id < b._id ? 1 : -1));
+  } else if (menu === 'ethnicity' && selectedEthnicity) {
+    filteredRecipes = filteredRecipes.filter(r => r.ethnicity === selectedEthnicity);
   }
 
+
+  // Menu Modal JSX (define after hooks, before return)
+  const menuModal = (
+    <Modal
+      visible={menuModalVisible}
+      animationType="slide"
+      transparent
+      onRequestClose={() => setMenuModalVisible(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', alignItems: 'center' }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 18, padding: 24, minWidth: 260, alignItems: 'center' }}>
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#bfa16a', marginBottom: 18 }}>Filter Recipes</Text>
+          {MENU_OPTIONS.map(opt => (
+            <TouchableOpacity
+              key={opt.key}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 18,
+                borderRadius: 12,
+                backgroundColor: menu === opt.key ? '#bfa16a' : '#f4f4f7',
+                marginBottom: 10,
+                minWidth: 180,
+                alignItems: 'center',
+              }}
+              onPress={() => {
+                setMenu(opt.key as any);
+                if (opt.key !== 'ethnicity') setSelectedEthnicity('');
+                setMenuModalVisible(false);
+              }}
+            >
+              <Text style={{ color: menu === opt.key ? '#fff' : '#bfa16a', fontWeight: '600', fontSize: 16 }}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+          {menu === 'ethnicity' && (
+            <View style={{ marginTop: 8, width: 200 }}>
+              <View style={{ borderWidth: 1, borderColor: '#d1cfc9', borderRadius: 10, backgroundColor: '#f9f9fa', overflow: 'hidden', minHeight: 36, justifyContent: 'center', width: 180 }}>
+                <Picker
+                  selectedValue={selectedEthnicity}
+                  onValueChange={setSelectedEthnicity}
+                  style={{ height: 36, width: 180 }}
+                  itemStyle={{ fontSize: 16, minWidth: 120, paddingHorizontal: 8, height: 36 }}
+                  mode="dropdown"
+                >
+                  {ETHNICITY_OPTIONS.map(e => (
+                    <Picker.Item key={e} label={e === '' ? 'Select ethnicity...' : e} value={e} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          )}
+          <TouchableOpacity onPress={() => setMenuModalVisible(false)} style={{ marginTop: 18 }}>
+            <Text style={{ color: '#bfa16a', fontWeight: 'bold', fontSize: 16 }}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // Main return for HomeScreen
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8f6f2' }}>
-      <FlatList
-        ListHeaderComponent={
-          <>
-            {/* Modern AppBar/Header */}
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingTop: Platform.OS === 'ios' ? 54 : 32,
-              paddingBottom: 18,
-              paddingHorizontal: 24,
-              backgroundColor: '#fff',
-              borderBottomLeftRadius: 32,
-              borderBottomRightRadius: 32,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 4,
-            }}>
-              <TouchableOpacity onPress={() => {/* TODO: open menu */}}>
-                <Ionicons name="menu" size={32} color="#bfa16a" />
-              </TouchableOpacity>
-              <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#bfa16a', letterSpacing: 1 }}>Cookbook</Text>
-              <TouchableOpacity onPress={() => router.push('/login')}>
-                <Ionicons name="person-circle-outline" size={32} color="#bfa16a" />
-              </TouchableOpacity>
-            </View>
+    <>
+      {menuModal}
+      <View style={{ flex: 1, backgroundColor: '#f8f6f2' }}>
+        <FlatList
+          ListHeaderComponent={
+            <>
+              {/* Modern AppBar/Header */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingTop: Platform.OS === 'ios' ? 54 : 32,
+                paddingBottom: 18,
+                paddingHorizontal: 24,
+                backgroundColor: '#fff',
+                borderBottomLeftRadius: 32,
+                borderBottomRightRadius: 32,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 8,
+                elevation: 4,
+              }}>
+                <TouchableOpacity onPress={() => router.push('/explore')}>
+                  <Ionicons name="menu" size={32} color="#bfa16a" />
+                </TouchableOpacity>
+                <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#bfa16a', letterSpacing: 1 }}>Cookbook</Text>
+                {user ? (
+                  <TouchableOpacity onPress={() => router.push('/profile')}>
+                    <Ionicons name="person-circle-outline" size={32} color="#bfa16a" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={() => router.push('/login')}>
+                    <Ionicons name="person-circle-outline" size={32} color="#bfa16a" />
+                  </TouchableOpacity>
+                )}
+              </View>
 
-            {/* Search Bar with shadow */}
-            <View style={{
-              marginTop: -24,
-              marginBottom: 12,
-              marginHorizontal: 24,
-              backgroundColor: '#fff',
-              borderRadius: 16,
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 16,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.07,
-              shadowRadius: 6,
-              elevation: 2,
-            }}>
-              <Ionicons name="search" size={22} color="#bfa16a" style={{ marginRight: 8 }} />
-              <TextInput
-                style={{ flex: 1, height: 44, fontSize: 16, color: '#222' }}
-                placeholder="Search recipes..."
-                placeholderTextColor="#bfa16a"
-                value={search}
-                onChangeText={setSearch}
-                returnKeyType="search"
-              />
-            </View>
-
-            {/* Section Title */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 8, marginTop: 2 }}>
-              <View style={{ width: 6, height: 24, backgroundColor: '#bfa16a', borderRadius: 3, marginRight: 10 }} />
-              <Text style={{ fontSize: 20, fontWeight: '600', color: '#bfa16a', letterSpacing: 0.5 }}>Most Recent</Text>
-            </View>
-          </>
-        }
-        data={filteredRecipes}
-        keyExtractor={item => item._id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: CARD_MARGIN * 2,
-          paddingTop: 0,
-          paddingBottom: 24,
-        }}
-        renderItem={({ item, index }) => (
-          <View
-            style={{
-              width: CARD_WIDTH,
-              marginBottom: 10,
-              alignItems: 'center',
-              alignSelf: 'center',
-            }}
-          >
-            <View style={{
-              backgroundColor: '#fff',
-              borderRadius: 18,
-              borderWidth: 1,
-              borderColor: '#e0e0e0',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.06,
-              shadowRadius: 6,
-              elevation: 2,
-              width: '100%',
-              overflow: 'hidden',
-            }}>
-              <TouchableOpacity
-                style={[styles.card, { width: '100%', aspectRatio: 2.2, padding: 0, backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }]}
-                onPress={() => router.push(`/recipes/${item._id}`)}
-                activeOpacity={0.92}
-              >
-                <Image
-                  source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
-                  style={[styles.fullImage, { borderRadius: 0 }]}
-                  resizeMode="cover"
+              {/* Search Bar with shadow */}
+              <View style={{
+                marginTop: 16,
+                marginBottom: 12,
+                marginHorizontal: 24,
+                backgroundColor: '#fff',
+                borderRadius: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 16,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.07,
+                shadowRadius: 6,
+                elevation: 2,
+              }}>
+                <Ionicons name="search" size={22} color="#bfa16a" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={{ flex: 1, height: 44, fontSize: 16, color: '#222' }}
+                  placeholder="Search recipes..."
+                  placeholderTextColor="#bfa16a"
+                  value={search}
+                  onChangeText={setSearch}
+                  returnKeyType="search"
                 />
-                <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
-                  <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.creatorOverlay} numberOfLines={1}>
-                    {item.createdBy?.email ? `By ${item.createdBy.email}` : item.createdBy ? `By ${item.createdBy}` : ''}
+              </View>
+
+              {/* Most Recent Title Section */}
+              {filteredRecipes.length > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 8, marginLeft: 18 }}>
+                  <Ionicons name="remove" size={32} color="#bfa16a" style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#bfa16a', letterSpacing: 0.5 }}>
+                    Most Recent
                   </Text>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.heartButton}
-                onPress={() => handleLike(item._id)}
-                disabled={!token || liked[item._id]}
-                activeOpacity={0.7}
-              >
-                <View style={styles.heartShape}>
-                  <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
-                  <Text style={styles.heartCount}>{item.likes || 0}</Text>
-                </View>
-              </TouchableOpacity>
+              )}
+            </>
+          }
+          data={filteredRecipes}
+          keyExtractor={(item, index) => `${item._id}-${index}`}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: CARD_MARGIN * 2,
+            paddingTop: 0,
+            paddingBottom: 24,
+          }}
+          renderItem={({ item, index }) => (
+            <View
+              style={{
+                width: CARD_WIDTH,
+                marginBottom: 10,
+                alignItems: 'center',
+                alignSelf: 'center',
+              }}
+            >
+              <View style={{
+                backgroundColor: '#fff',
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: '#e0e0e0',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                elevation: 2,
+                width: '100%',
+                overflow: 'hidden',
+              }}>
+                <TouchableOpacity
+                  style={[styles.card, { width: '100%', aspectRatio: 2.2, padding: 0, backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }]}
+                  onPress={() => router.push(`/recipes/${item._id}`)}
+                  activeOpacity={0.92}
+                >
+                  <Image
+                    source={{ uri: item.images?.[0] ? `http://192.168.50.210:8081${item.images[0]}` : undefined }}
+                    style={[styles.fullImage, { borderRadius: 0 }]}
+                    resizeMode="cover"
+                  />
+                  <View pointerEvents="none" style={[styles.infoOverlay, { zIndex: 10, backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.55)' }] }>
+                    <Text style={styles.titleOverlay} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.creatorOverlay} numberOfLines={1}>
+                      {typeof item.createdBy === 'object' && item.createdBy?.email ? `By ${item.createdBy.email}` : typeof item.createdBy === 'string' ? `By ${item.createdBy}` : ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.heartButton}
+                  onPress={() => handleLike(item._id)}
+                  disabled={!token}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.heartShape}>
+                    <Ionicons name="heart" size={28} color={liked[item._id] ? '#e57373' : '#fff'} style={{ zIndex: 2 }} />
+                    <Text style={styles.heartCount}>{item.likes || 0}</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        )}
-  style={{}}
-      />
+          )}
+          style={{}}
+        />
 
-      {/* Floating Upload Button */}
-      <TouchableOpacity
-        style={[
-          styles.fab,
-          {
-            backgroundColor: '#bfa16a',
-            shadowColor: '#bfa16a',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.18,
-            shadowRadius: 8,
-            elevation: 8,
-          },
-        ]}
-        onPress={() => router.push('/upload')}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={36} color="#fff" />
-      </TouchableOpacity>
-    </View>
+        {/* Floating Upload Button */}
+        <TouchableOpacity
+          style={[
+            styles.fab,
+            {
+              backgroundColor: '#bfa16a',
+              shadowColor: '#bfa16a',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              elevation: 8,
+            },
+          ]}
+          onPress={() => router.push('/upload')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={36} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  mostRecentTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#8d7754',
-    marginLeft: 22,
-    marginTop: 8,
-    marginBottom: CARD_MARGIN / 2,
-    letterSpacing: 0.2,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -232,10 +356,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9fa', // soft background
     borderBottomWidth: 0,
     marginBottom: 6,
-    shadowColor: '#b8a88e',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 4px 12px rgba(184,168,142,0.06)' }
+      : { shadowColor: '#b8a88e', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }),
     zIndex: 2,
     justifyContent: 'flex-start',
   },
@@ -309,11 +432,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#e6e3de',
     zIndex: 1,
     aspectRatio: 1,
-    boxShadow: Platform.OS === 'web' ? '0 2px 12px rgba(0,0,0,0.08)' : undefined,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }
+      : { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }),
   },
   overlay: {
     display: 'none', // overlay no longer used
@@ -364,9 +485,9 @@ const styles = StyleSheet.create({
     zIndex: 4,
     textAlign: 'center',
     minWidth: 12,
-    textShadowColor: 'rgba(0,0,0,0.18)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...(Platform.OS === 'web'
+      ? { textShadow: '0 1px 2px rgba(0,0,0,0.18)' }
+      : { textShadowColor: 'rgba(0,0,0,0.18)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }),
   },
   infoOverlay: {
     position: 'absolute',
@@ -388,9 +509,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     letterSpacing: 0.12,
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.25)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...(Platform.OS === 'web'
+      ? { textShadow: '0 1px 2px rgba(0,0,0,0.25)' }
+      : { textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }),
   },
   creatorOverlay: {
     fontSize: 12,
@@ -399,9 +520,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     opacity: 0.85,
-    textShadowColor: 'rgba(0,0,0,0.25)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...(Platform.OS === 'web'
+      ? { textShadow: '0 1px 2px rgba(0,0,0,0.25)' }
+      : { textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }),
   },
   infoBelow: {
     width: '100%',
@@ -425,9 +546,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     letterSpacing: 0.12,
     textAlign: 'center',
-    textShadowColor: 'rgba(255,255,255,0.7)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...(Platform.OS === 'web'
+      ? { textShadow: '0 1px 2px rgba(255,255,255,0.7)' }
+      : { textShadowColor: 'rgba(255,255,255,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }),
   },
   row: {
     flexDirection: 'row',
@@ -478,4 +599,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
+
+
 });

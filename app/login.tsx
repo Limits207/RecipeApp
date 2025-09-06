@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
+import { API_ENDPOINTS } from '../constants/api';
 import { useAuth } from '../AuthContext';
 import SocialLogin from './SocialLogin';
 
@@ -15,12 +16,20 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     setSubmitting(true);
     try {
-  const res = await axios.post('http://192.168.50.210:8081/auth/login', { email, password });
+      const res = await axios.post(
+        API_ENDPOINTS.login,
+        { email: email.trim().toLowerCase(), password }
+      );
       setToken(res.data.token);
       setUser(res.data.user);
       router.replace('/');
     } catch (err: any) {
-      Alert.alert('Login failed', err?.response?.data?.message || 'Unknown error');
+      const errorMsg = err?.response?.data?.message || '';
+      if (errorMsg.toLowerCase().includes('user') && errorMsg.toLowerCase().includes('not found')) {
+        Alert.alert('No account found', 'There is no account with that email.');
+      } else {
+        Alert.alert('Login failed', errorMsg || 'Unknown error');
+      }
     } finally {
       setSubmitting(false);
     }
